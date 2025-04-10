@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/pb33f/libopenapi"
@@ -59,11 +60,57 @@ Example:
 		put:
 			...
 */
-func (ob *OapiBuilder) AddPaths(schemer []Schemer) *OapiBuilder {
+// AddPaths добавляет пути в спецификацию
+// Сюда приходят схемы, в каждой из которых указан путь
+// Мы вычисляем, какие пути уже есть и удаляем их из схем
+func (ob *OapiBuilder) AddPaths(schemers []Schemer) *OapiBuilder {
 	ob.PasteWithIndent("paths:", 0)
 
-	for _, h := range schemer {
-		ob.PasteWithIndent(h.Scheme(), 1)
+	// seen хранит уже добавленные пути и методы
+	seen := map[string]map[string]string{} // path -> method -> true
+
+	// Регулярное выражение для поиска endpoint и method
+	re := regexp.MustCompile(`(\/\S+):\s*\n\s*(\w+):`)
+
+	for _, s := range schemers {
+		cs := s.Scheme()
+
+		matches := re.FindStringSubmatch(cs)
+
+		if len(matches) < 3 {
+			continue // пропускаем странные схемы
+		}
+
+		path := matches[1]
+		method := matches[2]
+
+		// если путь еще не добавлен, то добавляем его
+		if _, exists := seen[path]; !exists {
+			seen[path] = map[string]string{}
+		}
+
+		// если метод уже добавлен, то пропускаем
+		if _, exists := seen[path][method]; exists {
+			continue
+		}
+
+		// удаляем метод и путь из локальной схемы
+		// т.к путь идёт перед методом, он также удалится автоматически
+		i := strings.Index(cs, method)
+		cs = cs[i+len(method)+2:]
+
+		// добавляем схему в общий список
+		seen[path][method] = cs
+
+	}
+
+	// проходимся по всему списку и подставляем путь один раз
+	for path, methods := range seen {
+		ob.PasteWithIndent(path+":", 1)
+		for method, cs := range methods {
+			ob.PasteWithIndent(method+":", 2)
+			ob.PasteWithIndent(cs, 1)
+		}
 	}
 
 	return ob
@@ -77,12 +124,14 @@ Example:
 	Error:
 		...
 */
-func (ob *OapiBuilder) AddComponentsSchemas(schemer Schemer) *OapiBuilder {
+func (ob *OapiBuilder) AddComponentsSchemas(schemers []Schemer) *OapiBuilder {
 
 	ob.PasteWithIndent("components:", 0)
 	ob.PasteWithIndent("schemas:", 1)
 
-	ob.PasteWithIndent(schemer.Scheme(), 2)
+	for _, schemer := range schemers {
+		ob.PasteWithIndent(schemer.Scheme(), 2)
+	}
 
 	return ob
 }
@@ -124,7 +173,7 @@ func (ob *OapiBuilder) PasteWithIndent(textWithNewLines string, deepLevel int) *
 type HandlersWithSchemas struct {
 	MainInfoSchemas   Schemer
 	PathSchemas       []Schemer
-	ComponentsSchemas Schemer
+	ComponentsSchemas []Schemer
 }
 
 // generateSchemas generate oapi specification and save to file
@@ -185,8 +234,16 @@ func (y *yamlUtil) normalizeLine(line string, indentLevel int) string {
 	line = strings.Trim(line, "\n")
 	line = strings.ReplaceAll(line, "\t", indent)
 
-	y.content.WriteString(strings.Repeat(indent, indentLevel))
+	if indentLevel >= 0 {
+		y.content.WriteString(strings.Repeat(indent, indentLevel))
+	} else {
+		if len(line) > indentLevel {
+			line = line[indentLevel*-1:]
+		}
+	}
+
 	y.content.WriteString(line)
+
 	y.content.WriteString("\n")
 
 	return y.content.String()

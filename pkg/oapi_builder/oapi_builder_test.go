@@ -8,6 +8,73 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var pathsGetByIdScheme = `
+/admin/user/{id}:
+  get:
+    tags:
+      - admin
+      - user
+    summary: Get user details
+    operationId: getUserById
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      200:
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+`
+
+var pathsDeleteByIdScheme = `
+/admin/user/{id}:
+  delete:
+    tags:
+      - admin
+      - user
+    summary: Delete user
+    operationId: deleteUser
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      200:
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Status'
+`
+
+var pathsGetListScheme = `
+/admin/user:
+  get:
+    tags:
+      - admin
+      - user
+    summary: Get list of users
+    operationId: getUsers
+    responses:
+      200:
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+`
+
 var logger = slog.Default()
 
 func TestNew(t *testing.T) {
@@ -98,6 +165,108 @@ func TestOapiBuilder_AddMainInfo(t *testing.T) {
 
 			s := strings.NewReplacer("\n", "", "\t", "", " ", "")
 			require.Contains(t, s.Replace(tt.want.String()), s.Replace(got.String()))
+		})
+	}
+}
+
+func TestOapiBuilder_AddPaths(t *testing.T) {
+	mainInfoScheme := `
+openapi: 3.0.0
+info:
+	title: Test
+	version: 1.0.0
+`
+
+	type args struct {
+		schemers []Schemer
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "test",
+
+			args: args{
+				schemers: []Schemer{
+					&mainInfoSchemer{scheme: pathsGetByIdScheme},
+					&mainInfoSchemer{scheme: pathsGetListScheme},
+					&mainInfoSchemer{scheme: pathsDeleteByIdScheme},
+				},
+			},
+			want: `openapi: 3.0.0
+info:
+  title: Test
+  version: 1.0.0
+paths:
+  /admin/user/{id}:
+    get:
+      tags:
+        - admin
+        - user
+      summary: Get user details
+      operationId: getUserById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      tags:
+        - admin
+        - user
+      summary: Delete user
+      operationId: deleteUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+  /admin/user:
+    get:
+      tags:
+        - admin
+        - user
+      summary: Get list of users
+      operationId: getUsers
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ob := New(logger)
+			ob.AddMainInfo(&mainInfoSchemer{scheme: mainInfoScheme})
+			ob.AddPaths(tt.args.schemers)
+
+			require.Equal(t, tt.want, ob.String())
 		})
 	}
 }
