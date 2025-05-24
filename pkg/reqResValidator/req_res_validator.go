@@ -7,6 +7,7 @@ import (
 
 	libopenapi "github.com/pb33f/libopenapi"
 	libopenapiValidator "github.com/pb33f/libopenapi-validator"
+	"github.com/pb33f/libopenapi-validator/config"
 	"github.com/pb33f/libopenapi-validator/errors"
 )
 
@@ -29,7 +30,14 @@ func New(oapi []byte, logger *slog.Logger) (*ReqResValidator, error) {
 		return nil, docErrs
 	}
 
-	highLevelValidator, validatorErrs := libopenapiValidator.NewValidator(document)
+	highLevelValidator, validatorErrs := libopenapiValidator.NewValidator(document,
+		config.Option(
+			func(o *config.ValidationOptions) {
+				o.FormatAssertions = true
+				o.ContentAssertions = true
+			},
+		),
+	)
 
 	// Create a new Validator
 	if len(validatorErrs) > 0 {
@@ -70,7 +78,7 @@ func (r *ReqResValidator) ValidateRequest(req *http.Request) (bool, []*errors.Va
 func (r *ReqResValidator) ValidateResponse(req *http.Request, res *http.Response) (bool, []*errors.ValidationError) {
 	op := "req_res_validator.ValidateResponse"
 	log := r.logger.With("op", op)
-	responseValid, validationErrors := r.validator.ValidateHttpRequestResponse(req, res)
+	responseValid, validationErrors := r.validator.ValidateHttpResponse(req, res)
 
 	if !responseValid {
 		for i := range validationErrors {

@@ -170,6 +170,28 @@ func (ob *OapiBuilder) PasteWithIndent(textWithNewLines string, deepLevel int) *
 	return ob
 }
 
+func (ob OapiBuilder) GetOapiInBytesFromFile(path string) ([]byte, error) {
+	var oapiUtil oapiUtil
+	yaml, err := os.ReadFile(path)
+
+	if err := oapiUtil.ValidateScheme(string(yaml)); err != nil {
+		return nil, err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return yaml, nil
+}
+
+func (ob OapiBuilder) MustGetOapiInBytesFromFile(path string) []byte {
+	yaml, err := ob.GetOapiInBytesFromFile(path)
+	if err != nil {
+		panic(err)
+	}
+	return yaml
+}
+
 type HandlersWithSchemas struct {
 	MainInfoSchemas   Schemer
 	PathSchemas       []Schemer
